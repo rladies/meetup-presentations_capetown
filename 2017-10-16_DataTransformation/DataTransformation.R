@@ -1,0 +1,440 @@
+#' ---
+#' title: "Data wrangling with the tidyverse"
+#' author: "Based on material from the UCT course 'Data Science for Industry' by Ian Durbach"
+#' date: "16/10/2017"
+#' output: html_document
+#' ---
+#' 
+## ----setup, include=FALSE------------------------------------------------
+knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_knit$set(root.dir = "")
+
+#' 
+#' This material will help you learn
+#' 
+#' 1. how to save .csv data in the form of an .RData object
+#' 2. data transformations using the **dplyr** package, using the five key dplyr verbs: 
+#' 
+#'   + filter
+#'   + arrange
+#'   + mutate
+#'   + summarise
+#'   + group_by
+#'   
+#' 3. the pipe operator `%>%`
+#' 4. a few nice things you can do by combining dplyr verbs (grouped filters and mutates, for example)
+#' 5. how to use the dplyr verbs to build a small movie rating dataset
+#' 
+#' ### Sources and references
+#' 
+#'  * http://r4ds.had.co.nz/transform.html
+#'  * https://github.com/iandurbach/datasci-fi
+#' 
+#' ## Get the MovieLens data and save as .RData
+#' 
+#' [MovieLens](https://grouplens.org/datasets/movielens/) is a great resource for data on movie ratings. The full dataset has ratings on 40 000 movies by 260 000 users, some 24 million ratings in all. We'll use a smaller dataset with ratings of 9 000 movies by 700 users (100 000 ratings in all). 
+#' 
+#' I have put the datasets on some memory sticks that ought to be circulating. If you get the data off the sticks you should already have a .RData file with all four datasets in it, so you can go straight to loading the data.
+#' 
+#' If you want to try downloading it, here's how you do it.
+#' 
+#' Download the file "ml-latest-small.zip" from https://grouplens.org/datasets/movielens/ and unzip it to the *data* directory in your main project folder (make a folder called *data* if you haven't already). You should see four csv files: `links.csv`, `movies.csv`, `ratings.csv`, and `tags.csv`.
+#' 
+## ------------------------------------------------------------------------
+dir.create("data")
+download.file(
+  url = "http://files.grouplens.org/datasets/movielens/ml-latest-small.zip", 
+  destfile = "data/ml-latest-small.zip"
+)
+unzip("data/ml-latest-small.zip", exdir = "data")
+
+#' 
+#' First let's save the data we downloaded as an .RData object. .RData objects are smaller than csv, plus we can save all four csvs in a single .RData object that we can call with a single call to `load` the dataset later on.
+#' 
+## ------------------------------------------------------------------------
+# read in the csv files
+links <- read.csv("data/ml-latest-small/links.csv")
+movies <- read.csv("data/ml-latest-small/movies.csv")
+ratings <- read.csv("data/ml-latest-small/ratings.csv")
+tags <- read.csv("data/ml-latest-small/tags.csv")
+
+# save as .RData
+save(links, movies, ratings, tags, file = "data/movielens-small.RData")
+
+# check that it's worked
+rm(list = ls())
+load("data/movielens-small.RData")
+
+#' 
+#' You'll only need to do the above part once, so once you've got the data saved as .RData, start running the notebook from here.
+#' 
+#' ## Loading the tidyverse
+#' 
+#' Load the **tidyverse** collection of packages, which loads the following packages: **ggplot2**, **tibble**, **tidyr**, **readr**, **purrr**, and **dplyr**.
+#' 
+## ------------------------------------------------------------------------
+library(tidyverse)
+
+#' 
+#' Load the MovieLens data
+#' 
+## ------------------------------------------------------------------------
+load("data/movielens-small.RData")
+
+#' 
+#' Tibbles are a special kind of dataframe that work well with tidyverse packages ("in the tidyverse"). 
+#' 
+#' 
+## ------------------------------------------------------------------------
+# convert ratings to a "tibble"
+ratings <- as.tibble(ratings)
+
+#' 
+#' A nice feature of tibbles is that if you display them in the console (by typing `ratings`, for example) only the first few rows and columns are shown. 
+#' 
+## ------------------------------------------------------------------------
+print(ratings)
+
+#' 
+#' Explore some of the variables:
+#' 
+#' 
+## ------------------------------------------------------------------------
+str(ratings)
+
+#' 
+#' Notice that `ratings` doesn't include movie titles. 
+## ------------------------------------------------------------------------
+glimpse(ratings)
+
+#' 
+#' 
+## ------------------------------------------------------------------------
+glimpse(movies)
+
+#' 
+#' We'll look at database joins in more detail if we have time, but for now, this just adds movie title to the `ratings` data by pulling that information from `movies`, matching on the `moveId` column which is common between the two tibbles.
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings <- left_join(ratings, movies, by="movieId")
+
+#' 
+#' ## Filtering rows with `filter()`
+#' 
+#' Here we illustrate the use of `filter()` by extracting user 1's observations from the *ratings* data frame.
+#' 
+#' 
+## ------------------------------------------------------------------------
+u1 <- filter(ratings, userId == 1)
+u1
+
+#' 
+#' Next we extract the observations for user 1 that received a rating greater than 3. Multiple filter conditions are created with `&` (and) and `|` (or).
+#' 
+#' 
+## ------------------------------------------------------------------------
+filter(ratings, userId == 1 & rating > 3)
+
+#' 
+#' Here's another way of writing the same condition as above:
+#' 
+#' 
+## ------------------------------------------------------------------------
+filter(ratings, userId == 1, rating > 3)
+
+#' 
+#' The `%in%` command is often useful when using dplyr verbs:
+#' 
+#' 
+## ------------------------------------------------------------------------
+filter(ratings, userId == 1, rating %in% c(1,4))
+
+#' 
+#' ## Introducing the pipe
+#' 
+#' The pipe operator `%>%` is a very useful way of chaining together multiple operations. A typical format is something like:
+#' 
+#' *data* `%>%` *operation 1* `%>%` *operation 2* 
+#' 
+#' You read the code from left to right: Start with *data*, apply some operation (operation 1) to it, get a result, and then apply another operation (operation 2) to that result, to generate another result (the final result, in this example). A useful way to think of the pipe is as similar to "then".
+#' 
+#' The main goal of the pipe is to make code easier, by focusing on the transformations rather than on what is being transformed. Usually this is the case, but it's also possible to get carried away and end up with a huge whack of piped statements. Deciding when to break a block up is an art best learned by experience. 
+#' 
+#' 
+## ------------------------------------------------------------------------
+# filtering with the pipe
+ratings %>% filter(userId == 1)
+
+#' 
+#' The main usefulness of the pipe is when combining multiple operations:
+#' 
+#' 
+## ------------------------------------------------------------------------
+# first filter on userId then on rating
+u1_likes <- ratings %>% filter(userId == 1) %>% filter(rating > 3)
+u1_likes
+
+#' 
+#' 
+## ------------------------------------------------------------------------
+# another way of doing the same thing
+ratings %>% filter(userId == 1 & rating > 3)
+
+#' 
+#' ## Arranging rows with `arrange()`
+#' 
+#' Ordering user 1's "liked" movies in descending order of rating (note the use of `desc`):
+#' 
+#' 
+## ------------------------------------------------------------------------
+arrange(u1_likes, desc(rating))
+
+#' 
+#' Subsequent arguments to `arrange()` can be used to arrange by multiple columns. Here we first order user 1's liked movies by rating (in descending order) and then by timestamp (in ascending order)
+#' 
+#' 
+## ------------------------------------------------------------------------
+arrange(u1_likes, desc(rating), timestamp)
+
+#' 
+#' We can also use the pipe to do the same thing:
+#' 
+#' 
+## ------------------------------------------------------------------------
+u1_likes %>% arrange(desc(rating))
+
+#' 
+#' Finally, here's an example of combining filter and arrange operations with the pipe:
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings %>% filter(userId == 1 & rating > 3) %>% arrange(desc(rating))
+
+#' 
+#' ## Selecting columns with `select()`
+#' 
+#' Select is a bit like `filter()` for columns. The syntax is straightforward, the first argument gives the dataframe, and then you list the variables you want to select!
+#' 
+#' 
+## ------------------------------------------------------------------------
+select(u1_likes, title, rating)
+
+#' 
+#' To exclude variables just put a minus sign in front of them:
+#' 
+#' 
+## ------------------------------------------------------------------------
+select(u1_likes, -userId, -timestamp)
+
+#' 
+#' You can also use `select()` to reorder variables. A useful function here is `everything()`.
+#' 
+#' 
+## ------------------------------------------------------------------------
+# original order, userId is the first column
+u1_likes
+
+# reorder so title is the first column and `everything()` else, i.e., the other columns come after that
+select(u1_likes, title, everything())
+
+#' 
+#' ## Adding new variables with `mutate()`
+#' 
+#' Mutating operations add a new column to a dataframe. Here's a trivial example to get started:
+#' 
+#' 
+## ------------------------------------------------------------------------
+mutate(u1_likes, this_is = "trivial")  
+
+#' 
+#' A more useful use of mutate is to construct a new variable based on existing variables. This is the way that `mutate` is almost always used.
+#' 
+#' 
+## ------------------------------------------------------------------------
+mutate(u1, like = ifelse(rating > 3, 1, 0))  
+
+#' 
+#' We can also use the pipe for mutating operations. Hopefully you're getting used to the pipe by now, so let's embed a mutating operation within a larger pipe than we've used before. 
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings %>% 
+  mutate(like = ifelse(rating > 3, 1, 0)) %>% 
+  filter(userId == 1) %>% 
+  select(like, everything()) 
+
+#' 
+#' ## Aggregating over rows with `summarise()`
+#' 
+#' The `summarise()` verb (or `summarize()` will also work) summarises the rows in a data frame in some way. When applied to the whole data frame, it will collapse it to a single row. For example, here we take user 1's data, and calculate their average rating and the number of movies they have given a rating higher than 3 to:
+#' 
+#' 
+## ------------------------------------------------------------------------
+summarise(u1, mean = mean(rating), likes = sum(rating > 3))
+
+#' 
+#' You need to watch out for NAs when using `summarise()`. If one exists, operations like `mean()` will return NA. You can exclude NAs from calculations using `na.rm = TRUE`:
+#' 
+#' 
+## ------------------------------------------------------------------------
+# introduce an NA
+u1$rating[1] <- NA
+
+# see what happens
+summarise(u1, mean = mean(rating), likes = sum(rating > 3))
+
+#' 
+#' 
+## ------------------------------------------------------------------------
+# with na.rm = TRUE
+summarise(u1, mean = mean(rating, na.rm = TRUE), likes = sum(rating > 3, na.rm = TRUE))
+
+#' 
+#' `summarise()` is most useful when combined with `group_by()`, which imposes a grouping structure on a data frame. After applying `group_by()`, subsequent dplyr verbs will be applied to individual groups, basically repeating the code for each group. That means that `summarise()` will calculate a summary for each group:
+#' 
+#' 
+## ------------------------------------------------------------------------
+# tell dplyr to group ratings by userId
+ratings_by_user <- group_by(ratings, userId)
+
+# apply summarize() to see how many movies each user has rated
+ratings_by_user %>% summarize(count = n()) %>% head()
+
+#' 
+#' 
+## ------------------------------------------------------------------------
+# get sorted counts (plus some presentation stuff)
+ratings %>% 
+group_by(userId) %>% 
+summarize(count = n()) %>% 
+arrange(desc(count)) %>% 
+head(10) %>%     # take first ten rows
+t()  # transpose 
+
+#' 
+#' 
+## ------------------------------------------------------------------------
+# or with the pipe (last time)
+ratings %>% group_by(userId) %>% summarize(count = n()) %>% head(10)
+
+#' 
+#' ## Other uses of `grouped_by()`: grouped filters and grouped mutates
+#' 
+#' While you'll probably use `group_by()` most often with `summarise()`, it can also be useful when used in conjunction with `filter()` and `mutate()`. Grouped filters perform the filtering within each group. Below we use it to extract each user's favourite movie (or movies, if there's a tie).
+#' 
+#' 
+## ------------------------------------------------------------------------
+# example of a grouped filter
+ratings %>% group_by(userId) %>% filter(rank(desc(rating)) < 2)
+
+#' 
+#' Here we use a grouped mutate to standardise each user's ratings so that they have a mean of zero (for each user, which guarantees the overall mean rating is also zero).
+#' 
+#' 
+## ------------------------------------------------------------------------
+# example of a grouped mutate
+ratings %>% 
+  group_by(userId) %>%
+  mutate(centered_rating = rating - mean(rating)) %>% 
+  select(-movieId, -timestamp, -genres)
+
+#' 
+#' ## Putting it all together: extracting a sample set of reviews
+#' 
+#' In this section we'll take what we've learned and do something useful: build a 15x20 matrix containing the reviews made on 20 movies by 15 users. 
+#' 
+#' First, we select the 15 users we want to use. I've chosen to use 15 users with moderately frequent viewing habits (remember there are 700 users and 9000 movies).
+#' 
+## ------------------------------------------------------------------------
+users_frq <- ratings %>% group_by(userId) %>% summarize(count = n()) %>% arrange(desc(count))
+my_users <- users_frq$userId[101:115]
+
+#' 
+#' Next, we select the 20 movies we want to use:
+#' 
+#' 
+## ------------------------------------------------------------------------
+movies_frq <- ratings %>% group_by(movieId) %>% summarize(count = n()) %>% arrange(desc(count))
+my_movies <- movies_frq$movieId[101:120]
+
+#' 
+#' Now we make a dataset with only those 15 users and 20 movies:
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings_red <- ratings %>% filter(userId %in% my_users, movieId %in% my_movies) 
+# and check there are 15 users and 20 movies in the reduced dataset
+n_users <- length(unique(ratings_red$userId))
+n_movies <- length(unique(ratings_red$movieId))
+print(paste("number of users is", n_users))
+print(paste("number of movies is", n_movies))
+
+#' 
+#' Let's see what the 20 movies are:
+#' 
+#' 
+## ------------------------------------------------------------------------
+movies %>% filter(movieId %in% my_movies) %>% select(title)
+
+#' 
+#' However, note all the movie titles are still being kept:
+#' 
+#' 
+## ------------------------------------------------------------------------
+head(levels(ratings_red$title), 10)
+
+#' 
+#' This actually isn't what we want, so let's drop the ones we won't use.
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings_red <- droplevels(ratings_red)
+levels(ratings_red$title)
+
+#' 
+#' We now want to reshape the data frame into a 15x20 matrix i.e.from "long" format to "wide" format. We can do this using the `spread()` verb. 
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings_red %>% spread(key = movieId, value = rating)
+
+#' 
+#' The preceding line *doesn't* work: as you can see we land up with more than one row per user. But it is useful as an illustration of `spread()`. Question: why doesn't it work?
+#' 
+#' Here's the corrected version:
+#' 
+#' 
+## ------------------------------------------------------------------------
+ratings_red %>% select(userId, title, rating) %>% spread(key = title, value = rating)
+
+#' 
+#' Finally, since we just want to know who has seen what, we replace all NAs with 0 and all other ratings with 1:
+#' 
+#' 
+## ------------------------------------------------------------------------
+viewed_movies <- ratings_red %>% 
+  complete(userId, title) %>% 
+  mutate(seen = ifelse(is.na(rating), 0, 1)) %>% 
+  select(userId, title, seen) %>% 
+  spread(key = title, value = seen)
+
+#' 
+#' We could have got this more simply with a call to `table()`, which creates a two-way frequency table.
+#' 
+#' 
+## ------------------------------------------------------------------------
+table(ratings_red$userId, ratings_red$title)
+
+#' 
+#' Finally, we save our output for later use!
+#' 
+#' 
+## ------------------------------------------------------------------------
+dir.create("output")
+save(ratings_red, viewed_movies, file = "output/viewed_movies.RData")
+
+#' 
+#' ## Exercises
+#' 
+#' Do the exercises in [Chapter 5](http://r4ds.had.co.nz/transform.html) (data transformation using the **dplyr** verbs) of R4DS. There are exercises at the end of each major subsection. Do as many of these exercises as you need to feel comfortable with the material.
