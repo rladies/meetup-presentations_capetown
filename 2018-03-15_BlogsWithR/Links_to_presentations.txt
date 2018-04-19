@@ -1,0 +1,9 @@
+
+
+Maëlle Salmon's presentation lives here: 
+http://www.masalmon.eu/rladiesct/slides#1
+
+Stephanie Kovalchik's presentation lives here:
+
+Marie Dussault's presentation lives here: 
+https://github.com/mcdussault/RLadies/blob/master/rladies_14032018.Rmd
