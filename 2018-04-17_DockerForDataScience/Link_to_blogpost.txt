@@ -1,0 +1,2 @@
+Monica's blog about Docker for Data Science lives here: 
+https://pinsleepe.github.io/blog/2018/04/17/RLadies-Meetup.html
