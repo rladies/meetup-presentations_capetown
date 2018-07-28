@@ -1,0 +1,381 @@
+---
+title: "R Notebook for ggmap (and a tiny taste of sf)"
+author: "Theoni Photopoulou // 26 July 2018"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+---
+
+This is a brief tutorial for using the R package ```ggmap``` to make maps in R. 
+
+I am going to start with an introduction to ggplot2 and use False Bay as a working example. 
+
+If there's time, I will give you a tiny taste of the ```sf``` package which I can only tell you a tiny but about because I am still learning how to use it!
+
+Install the packages if you don't already have them:
+```{r install packages, eval=FALSE, echo=TRUE}
+install.packages(sp, dep=T)
+install.packages(tidyverse, dep=T)
+install.packages(ggmap, dep=T)
+install.packages(gridExtra, dep=T)
+install.packages(sf, dep=T)
+```
+If you already have them, load them into your workspace:
+```{r load packages, eval=TRUE, echo=TRUE}
+require(sp)
+require(tidyverse)
+require(ggmap)
+require(gridExtra)
+require(sf)
+```
+
+## Before you learn  how to ggmap it helps to know how to ggplot2
+```ggplot2``` can seem a little bit counterintuitive at first, but once you've got the hang of it, I think you'll really enjoy it.
+
+The main thing you need to know is that ```ggplot2``` is modular. You start by producing a base plot by defining the bare essentials and then you add features to it. 
+
+If you like Lego, it might help to think of it like that, as building blocks or layers. 
+
+Let's look at an example, the ```mpg``` dataset from the ```ggplot2``` library contains observations collected by the US Environment Protection Agency on 38 models of car. 
+
+This is the dataset used in the R for Data Science book and you can find this exact example at ```http://r4ds.had.co.nz/data-visualisation.html```. 
+
+```{r mpg, eval=TRUE, echo=TRUE}    
+head(mpg)
+```
+You can find out all the details about this dataset by querying it
+```{r query mpg}
+?mpg
+```
+Lets plot engine size ```displ``` against highway miles per gallon ```hwy```.
+```{r ggplot2 base, eval=TRUE, echo=TRUE}
+ggplot(data = mpg) + 
+  geom_point(mapping = aes(x = displ, y = hwy)) 
+
+gg.mpg <- ggplot(data = mpg)
+gg.mpg + geom_point(mapping = aes(x = displ, y = hwy))
+```
+
+Let's look at the outliers, what could be setting them apart? Type of car? How can we visualise that?
+```{r ggplot2 options, eval=TRUE, echo=TRUE}
+gg.mpg + geom_point(mapping = aes(x = displ, y = hwy, colour=class)) # colour by type
+gg.mpg + geom_point(mapping = aes(x = displ, y = hwy, alpha=cty)) # adjust transparency by city miles/gallon
+gg.mpg + geom_point(mapping = aes(x = displ, y = hwy, shape=drv)) # make shapes vary by drive type
+```
+
+Once you have plotted the things you want, the usual next step is the make the plot look pretty. 
+```{r ggplot2 grids, eval=TRUE, echo=TRUE}
+gg.mpg + 
+  geom_point(mapping = aes(x = displ, y = hwy, colour=class)) +
+  xlab("Engine size") + ylab("Highway miles/gallon") +
+  facet_wrap(~ drv) +
+  theme_bw(base_size=20)  
+
+gg.mpg + 
+  geom_point(mapping = aes(x = displ, y = hwy, colour=class)) +
+  xlab("Engine size") + ylab("Highway miles/gallon") +
+  scale_colour_discrete(name="Car type") +  
+  facet_grid(cyl ~ drv) +
+  theme_bw(base_size=18)
+```
+
+```{r ggplot2 save}
+  pdf("my_test_plot.pdf", width=8, height=6)
+  gg.mpg + 
+  geom_point(mapping = aes(x = displ, y = hwy, colour=class)) +
+  xlab("Engine size") + ylab("Highway miles/gallon") +
+  scale_colour_discrete(name="Car type") +  
+  facet_grid(cyl ~ drv) +
+  theme_bw(base_size=18)
+  dev.off()
+```
+
+
+This is a very quick introduction to ```ggplot2``` and there is heaps more you can do. There is an excellent ```ggplot2``` cheatsheet that you can find here ```https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf``` that is a nice guide to the many options. 
+
+## ggmap in the flesh  
+Now that you know the basics of ```ggplot2``` you will easily pick up the idea behind ggmap. The syntax is almost exactly the same. I'm going to use some great white shark data that I am working on to show you how to make maps.
+
+```{r load data, eval=TRUE, echo=FALSE}
+load(file="/Users/theoniphotopoulou/Dropbox/RESEARCH/Sharks_AlisonKock/20170123_Movement/FBsharks/output/receiver.location.RData")
+load(file="/Users/theoniphotopoulou/Dropbox/RESEARCH/Sharks_AlisonKock/20170123_Movement/FBsharks/output/y_for_grid.RData")
+ym <- y; rm(y)
+yms <- ym %>% select(shark_id, datetime, sitecode, season, month, year, hr, sitevisitID, rangerec, prevtime, inshore_island, Lon_site, Lat_site, Lon_prevsite, Lat_prevsite)
+
+fb_rec <- receiver.location %>% 
+  dplyr::select("Lon_site","Lat_site","sitecode","rec_area") %>%
+  dplyr::filter(rec_area!="NOTFB", rec_area!="NH")
+```
+
+The main function in ```ggmap``` for actually producing a map is ```qmplot```. This goes and finds the actual map from the server you have requested. There are quite a few different types of maps you can chose from, inlcuding satellite maps, stylised maps and simple maps. 
+
+I have a dataset of detections of white sharks by underwater acoustic receivers that are moored around False Bay.
+
+Each row in my dataframe has an x and a y coordinate associated with it and corresponds to a point in False Bay, where there was an acoustic receiver. 
+```{r}
+head(fb_rec) # receiver dataset
+head(yms) # shark detection dataset
+```
+
+So lets start by bringing up a map of False Bay.
+```{r map options}
+fbs <- qmplot(x=Lon_site, y=Lat_site, data = fb_rec, f=0.8, source="stamen", maptype = "toner-lite", geom = "blank") + theme_bw(); fbs
+fbsty <- qmplot(Lon_site, Lat_site, data = fb_rec, f=0.6, source="stamen", maptype = "watercolor", geom = "blank") + theme_bw()
+fbsat <- qmplot(Lon_site, Lat_site, data = fb_rec, f=0.6, source="google", maptype = "satellite", geom = "blank") + theme_bw()
+# load("fb_base_maps.RData")
+
+lay <- rbind(c(1, 2),
+            c(3, 4))
+grid.arrange(fbs, fbsty, fbsat, fbsat, layout_matrix=lay)
+```
+
+I wanted to produce a map of the data for each shark with the start and end date for when the shark was detected for the first time and the last time. So I set up some data frames to hold all the first dates and the last dates.
+```{r date range}
+mindates <- yms %>% group_by(shark_id) %>% 
+  dplyr::filter(datetime==min(datetime)) %>% 
+  dplyr::mutate(date=unlist(strsplit(as.character(datetime), split=" "))[1]) %>% 
+  dplyr::select(shark_id, date)
+
+maxdates <- yms %>% group_by(shark_id) %>%
+  dplyr::filter(datetime==max(datetime)) %>% 
+  dplyr::mutate(date=unlist(strsplit(as.character(datetime), split=" "))[1]) %>% 
+  dplyr::select(shark_id, date)
+
+date_range <- left_join(mindates, maxdates, by="shark_id") %>% dplyr::rename(start_date=date.x, end_date=date.y)
+head(date_range)
+
+date_range <- date_range %>% mutate(x=18.4, y=-34.52)
+head(date_range)
+```
+
+I don't want to run this here because it produces 67 maps, one for each shark but lets look at three of them:
+```{r, eval=FALSE}
+for (s in unique(yms$shark_id)){
+  
+  # s <- 604
+  shark <- filter(yms, shark_id==s)
+  daterng <- filter(date_range, shark_id==s)
+  
+  fbs +
+    geom_point(data = shark, aes(x = Lon_site, y = Lat_site), colour = I("black")) +
+    geom_segment(data = shark, aes(x = Lon_site, y = Lat_site,
+                                   xend = Lon_prevsite, yend = Lat_prevsite,
+                                   colour = as.factor(shark_id)),
+                 arrow=arrow(length = unit(0.4,"cm")), alpha=0.3) +
+    geom_text(data=daterng, aes(x=x, y=y, label=paste("From ",start_date," to ",end_date)), hjust=0.4, vjust=0.5) +
+    theme(legend.position="none")
+  # ggsave(paste("example_shark",s,"_map.jpg",sep=""),width=15, height=15, units="cm",dpi=500)
+
+}
+```
+
+You can also plot maps side-by-side using the ```facet``` function we used earlier
+```{r facet map}
+set.seed(123)
+ym_sub <- filter(ym, shark_id %in% sample(shark_id, size=3, replace=F))
+
+fbs +
+  geom_point(data = ym_sub, aes(x = Lon_site, y = Lat_site), colour = I("black")) + 
+  geom_segment(data = ym_sub, aes(x = Lon_site, y = Lat_site,
+                                  xend = Lon_prevsite, yend = Lat_prevsite, 
+                                  colour = as.factor(shark_id)), 
+               arrow=arrow(length = unit(0.1,"cm")), alpha=0.3) + 
+  facet_wrap(~ shark_id) + 
+  theme(strip.background = element_rect(colour=NA, fill=NA), strip.text.x = element_text(size = 15), legend.position="none")
+```
+
+Part of my analysis on the shark data is looking at how sharks are using the Bay. 
+
+But because we only have detections of sharks at fixed locations, we can only infer space use at a coarse scale on a grid. So I wanted to plot the data with the grid overlayed. 
+
+The ingredients I needed for this were the number of cells in the grid, the mid points of the cells in the grid, and the size of each grid cell. 
+```{r}
+load("mid_grd.RData")
+mid_grd
+cd
+cs
+``` 
+
+I'm sure there's a better way of doing this, but I used the ```geom_segments``` function in ```ggplot2``` to draw my grid. 
+
+To draw a segment you need to provide the start and end point of each segment. 
+
+I am going to draw a 4x4 grid so I need to set up the start and end point of five horizontal and five vertical segments. 
+```{r}
+# set up the location of the horizontal segments. all segments start and end in the same place but are drawn at a different y.
+grx1 <- mid_grd[1,1]-(cs[1]/2)
+grxmax <- mid_grd[cd[1],1]+(cs[1]*1/2)
+
+# take the first four y locations of the grid cell centres and move them up a bit, take the last one and move it down a bit
+gry <- c(unique(mid_grd[,2])[c(1:cd[1])]+(cs[2]/2), unique(mid_grd[,2])[cd[1]]-(cs[2]/2))
+
+expand.grid(x=grx1,y=gry); expand.grid(x=grxmax,y=gry)
+horizlines <- cbind(expand.grid(x=grx1,y=gry), expand.grid(xend=grxmax,yend=gry))
+horizlines
+
+# set up the location of the vertical segments. all segments start and end in the same place but are drawn at a different x.
+gry1 <- unique(mid_grd[,2])[1]+(cs[2]/2)
+grymax <- unique(mid_grd[,2])[cd[1]]-(cs[2]*1/2)
+
+# take the first four x locations of the grid cell centres and move them left a bit, take the last one and move it forward a bit
+grx <- c(unique(mid_grd[,1])[c(1:cd[1])]-(cs[1]/2), unique(mid_grd[,1])[cd[1]]+(cs[1]/2))
+
+expand.grid(x=grx, y=gry1); expand.grid(xend=grx, yend=grymax)
+vertlines <- cbind(expand.grid(x=grx,y=gry1), expand.grid(xend=grx,yend=grymax))
+vertlines
+
+```
+```{r}
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
+n <- 12
+ggcolours <- gg_color_hue(n)
+nn <- 9 # which colour do you want out of the 12 defined above
+lty <- 1 # line type
+lwt <- 2 # line weight
+gra <- 0.3 # grid transparency
+lend <- "round" # line end type
+shark <- filter(yms, shark_id==612)
+
+fbs + geom_segment(data = horizlines, aes(x = x, y = y, xend = xend, yend = yend), size=lwt, color=ggcolours[nn], lineend=lend, linetype=lty, alpha=gra) + 
+      geom_segment(data = vertlines, aes(x = x, y = y, xend = xend, yend = yend), size=lwt, color=ggcolours[nn], lineend=lend, linetype=lty, alpha=gra) + 
+      geom_point(data = shark, aes(x = Lon_site, y = Lat_site), 
+              colour = I("black")) +
+      geom_segment(data = shark, aes(x = Lon_site, y = Lat_site,
+              xend = Lon_prevsite, yend = Lat_prevsite, 
+              colour = as.factor(shark_id)), 
+              arrow=arrow(length = unit(0.4,"cm")), alpha=0.5, size=0.8) + theme(legend.position="none") +
+      geom_text(data=mid_grd, aes(x=x, y=y, label=grid_id), hjust=0.4, vjust=0.5, color=ggcolours[nn]) 
+
+```
+
+
+## sf is a package for handling spatial objects
+The main improvement that sf offers over previous options is that with sf you can treat your spatial object as you would a dataframe and use all the tidyverse verbs, like filter, select, summarise, mutate etc. 
+
+If you have any experience with the sp package, which has been the staple for spatial data handling in R for a long time, you will particularly enjoy sf!
+
+To turn my dataset of white shark acoustic detections into a spatial dataframe I first define the columns holding the coordinates of acoustic receivers and convert it to a type of object called SpatialPointsDataFrame. Each row in my dataframe has an x and a y coordinate associated with it and corresponds to a point in False Bay, where there was an acoustic receiver.
+```{r sf intro}
+ymsp <- yms
+coordinates(ymsp) <- ~ Lon_site + Lat_site
+head(ymsp)
+```
+
+Now I can turn the spatial ```ymsp``` object into an ```sf``` object. 
+```{r st as sf}
+ymsf <- st_as_sf(ymsp, coords=c(Lon_site + Lat_site))
+class(ymsf)
+head(ymsf, n=3)
+```
+
+You'll see that columns I've defined as coordinates have disappeared and we have a new column called ```geometry```. 
+
+It knows there are 54590 locations, as many as the rows in the dataframe, and it also knows it has no coordinate reference system: ```epsg (SRID): NA```. 
+
+You need to define a coordinate reference system or "crs", to tell ```sf``` what kind of coordinates are in your coordinate column. 
+For longitude and latitude you use the WGS84 projection string. 
+
+
+```{r define crs}
+wgs_crs <- "+proj=longlat +ellps=WGS84 +no_defs"
+st_crs(ymsf) <- wgs_crs
+head(ymsf, n=3)
+```
+
+It's not such a problem for us here in South Africa because we aren't very far from the equator, but in some areas of the globe if you plot longitude and latitude without projecting it, you can get very strange-looking maps. 
+
+A geographical projection is essentially a mathematical formula for turning a sphere, the world, into a flat map that will look sensible. There are lots of options for the kind of projection you use and you can find information about that online. 
+
+I am going to project my data using transverse mercator projection, which is appropriate for small areas at this latitude, and I'm going to centre it on False Bay.
+
+This is a transverse mercator projection centred on a longitude of 18.5 degrees east, which is about the middle of False Bay
+```{r tmerc}
+tmerc18.5 <- "+proj=tmerc +lat_0=0 +lon_0=18.5 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0"
+
+ymsf_crs <- st_transform(ymsf, crs=tmerc18.5)
+head(ymsf_crs, n=3)
+```
+
+I'm going to bring in a coastline that I have previously converted to an ```sf``` object.
+```{r, eval=TRUE, echo=FALSE}
+load("/Users/theoniphotopoulou/Dropbox/RESEARCH/Sharks_AlisonKock/20170123_Movement/FBsharks/output/fbp_coast50_wgs.RData") # contains sps_crs, an sf object
+```
+
+I'm going to create the grid that I used earlier but as a spatial object and work out the area of sea in each grid cell.
+
+```{r}
+# create a bounding box for the area
+lonRangefbgrid <- range(st_coordinates(sps_crs)[,1])
+latRangefbgrid <- range(st_coordinates(sps_crs)[,2])
+bb <- matrix(c(lonRangefbgrid, latRangefbgrid), nrow = 2, byrow = TRUE, dimnames = list(NULL, c("min", "max")))
+bb
+
+# define the dimensions of my grid, 4 by 4 cells
+n <- 4 
+fbwidth <- diff(range(st_coordinates(sps_crs)[,1]))/n # 10201.42
+fblength <- diff(range(st_coordinates(sps_crs)[,2]))/n # 8838.874
+cs <- c(fbwidth, fblength)  # gives a 4 x 4 grid
+cs
+
+cc <- bb[,1]; cc # bottom left corner of the grid
+cd <- c(n,n); cd # dimensions
+
+# define the spatial grid 
+sf_grd <- sf::st_make_grid(x=sps_crs, offset=cc, cellsize=cs, n=c(n,n), what="polygons")
+sf_grd
+plot(sf_grd); plot(sps_crs, add=TRUE)
+```
+
+Next, find the area of overlap between the sea and the grid cells.
+```{r}
+st_area(sf_grd) # area of grid
+st_area(sps_crs) # area of sea
+
+# this gives an index of the elements of y that overlap x, where x is the coastline (sps_crs) and y is the grid (p_grd_crs)
+st_overlaps(sps_crs, sf_grd)[1]
+
+# find the intersection of the grid and the coastline
+int <- st_intersection(sps_crs, sf_grd)
+int
+
+# add in an area column to the intersection object (area of the coastline polygon in each grid cell)
+int$areasea <- st_area(int$geometry)
+plot(sps_crs$geometry, col='grey') # plot the sea polygon
+plot(st_geometry(sf_grd), add=T) # add the grid
+plot(int$geometry, col='lightblue', add=T) # add the areas of intersection between the sea and the grid
+
+```
+
+## Exercises? (if there's time and keenness)
+```http://r4ds.had.co.nz/data-visualisation.html#coordinate-systems```
+
+## Useful links
+
+```ggplot2``` cheatsheet: ```https://www.rstudio.com/wp-content/uploads/2015/03/ggplot2-cheatsheet.pdf```
+
+A nice blog post about using ```ggmap```: ```https://blog.dominodatalab.com/geographic-visualization-with-rs-ggmaps/```
+
+```ggmap``` cheatsheet: ```https://www.nceas.ucsb.edu/~frazier/RSpatialGuides/ggmap/ggmapCheatsheet.pdf```
+
+```sf``` vignette: ```https://cran.r-project.org/web/packages/sf/vignettes/sf1.html#crs```
+
+R for Data Science online book: ```http://r4ds.had.co.nz```
+
+Useful page for migrating from ```sp``` to ```sf```: ```https://github.com/r-spatial/sf/wiki/migrating```
+
+Post on intersection polygons for area calculation: ```https://rpubs.com/rural_gis/255550```
+
+
+
+
+
+
+
+
+
+

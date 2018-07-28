@@ -3,7 +3,10 @@ LINKS TO PRESENTATIONS
 Maëlle Salmon's presentation lives here: 
 http://www.masalmon.eu/rladiesct/slides#1
 
-Stephanie Kovalchik's presentation lives here:
+Stephanie Kovalchik's presentation is in this folder as a .pdf: 
+SportsBlogging_Rladies_Capetown.pdf
 
 Marie Dussault's presentation lives here: 
 https://github.com/mcdussault/RLadies/blob/master/rladies_14032018.Rmd
+
+
